@@ -1,0 +1,31 @@
+# Dependency directories
+node_modules/
+/.pnp
+.pnp.js
+
+# Next.js & Turborepo Build outputs
+.next/
+out/
+.turbo/
+build/
+dist/
+
+# Environment variables (CRITICAL SECURITY)
+.env
+.env*.local
+
+# Custom Python Builder Scripts
+*.py
+
+# Prisma local SQLite/temp files (if any)
+*.db
+*.db-journal
+
+# Logs and Temp Uploads
+logs
+*.log
+temp_uploads/
+
+# OS generated files
+.DS_Store
+Thumbs.db

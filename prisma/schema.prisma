@@ -1,0 +1,270 @@
+// ==========================================
+// ENTERPRISE FINANCE ADMIN SCHEMA
+// ==========================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  // CRITICAL: Enforces logical relations only. 
+  // No physical foreign key constraints will be created in MySQL/TiDB.
+  relationMode = "prisma"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL_SUCCESS
+  ROLLED_BACK
+}
+
+// ==========================================
+// CORE MODELS
+// ==========================================
+
+model Category {
+  id          String          @id @default(uuid()) @db.VarChar(36)
+  name        String
+  type        TransactionType
+  color       String?         @db.VarChar(10)
+  
+  // The Relation to User
+  userId      String?
+  user        User?           @relation(fields: [userId], references: [id])
+
+  incomes     Income[]
+  expenses    Expense[]
+
+  created_at  DateTime        @default(now())
+  updated_at  DateTime        @updatedAt
+  deleted_at  DateTime?
+
+  @@index([type])
+  @@index([userId]) // Good practice to index foreign keys in Prisma relationMode
+}
+
+model Income {
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  user_id          String    @db.VarChar(36) // Ties record to specific user account
+  category_id      String    @db.VarChar(36)
+  
+  source           String    @db.VarChar(255)
+  amount           Decimal   @db.Decimal(12, 2)
+  currency         String    @default("USD") @db.VarChar(3)
+  
+  transaction_date DateTime
+  payment_mode     String?   @db.VarChar(50) // 'Bank', 'Cash', 'Stripe'
+  
+  recurring        Boolean   @default(false)
+  recurring_frequency String? @db.VarChar(50) // 'Monthly', 'Yearly'
+  
+  notes            String?   @db.Text
+  tags             Json?     // Array of custom strings
+  metadata_json    Json?     // Raw dump from Excel row for audits
+  
+  category         Category  @relation(fields: [category_id], references: [id])
+
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  deleted_at       DateTime?
+
+  @@index([user_id])
+  @@index([category_id])
+  @@index([transaction_date])
+}
+
+model Expense {
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  user_id          String    @db.VarChar(36) 
+  category_id      String    @db.VarChar(36)
+  
+  vendor           String    @db.VarChar(255)
+  amount           Decimal   @db.Decimal(12, 2)
+  currency         String    @default("USD") @db.VarChar(3)
+  
+  transaction_date DateTime
+  payment_mode     String?   @db.VarChar(50) 
+  
+  recurring        Boolean   @default(false)
+  recurring_frequency String? @db.VarChar(50) 
+  
+  notes            String?   @db.Text
+  tags             Json?     
+  metadata_json    Json?     
+  
+  category         Category  @relation(fields: [category_id], references: [id])
+
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  deleted_at       DateTime?
+
+  @@index([user_id])
+  @@index([category_id])
+  @@index([transaction_date])
+}
+
+// ==========================================
+// EXCEL & AUTOMATION ENGINES
+// ==========================================
+
+model ExcelMappingTemplate {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  name            String
+  target_table    String   // 'Income' or 'Expense'
+  mapping_json    Json     // Stores Column -> DB Field mapping
+  validation_rules Json?   // Custom regex or rules per column
+  
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([target_table])
+}
+
+model AutomationJobLog {
+  id              String    @id @default(uuid()) @db.VarChar(36)
+  job_type        String    // e.g., 'EXCEL_IMPORT', 'DUPLICATE_CHECK'
+  status          JobStatus @default(PENDING)
+  
+  file_name       String?
+  total_rows      Int       @default(0)
+  successful_rows Int       @default(0)
+  failed_rows     Int       @default(0)
+  
+  error_report    Json?     // Stores row-level errors
+  
+  started_at      DateTime  @default(now())
+  completed_at    DateTime?
+
+  @@index([status])
+  @@index([job_type])
+}
+
+model User {
+  id               String          @id @default(cuid())
+  name             String
+  email            String          @unique
+  password         String
+  role             String          @default("USER")
+  isMasterAdmin    Boolean         @default(false)
+  status           String          @default("ACTIVE")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  currencyCode     String          @default("USD")
+  categories       Category[] 
+  transactionPin   String?
+  pinResetToken    String?
+  pinResetExpires  DateTime?
+  sentEmails       InternalEmail[] @relation("SentEmails")
+  receivedEmails   InternalEmail[] @relation("ReceivedEmails")
+  
+  // Password Recovery Fields
+  passwordResetOtp        String?
+  passwordResetOtpExpires DateTime?
+  familyHelpApproved      Boolean   @default(false)
+  familyHelpRequestedAt   DateTime?
+  
+  contacts                Contact[]
+}
+model Currency {
+  code   String @id @db.VarChar(5)  // e.g., 'USD', 'INR', 'AED'
+  symbol String @db.VarChar(10)     // e.g., '$', '₹', 'د.إ'
+  name   String @db.VarChar(50)     // e.g., 'US Dollar', 'Indian Rupee'
+}
+
+model InternalEmail {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  senderId       String?  @db.VarChar(36)
+  senderEmail    String
+  recipientId    String   @db.VarChar(36)
+  recipientEmail String
+  subject        String
+  body           String   @db.Text
+  read           Boolean  @default(false)
+  category       String   @default("PRIMARY") // PRIMARY, UPDATES, SOCIAL
+  system         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  sender         User?    @relation("SentEmails", fields: [senderId], references: [id])
+  recipient      User     @relation("ReceivedEmails", fields: [recipientId], references: [id])
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([createdAt])
+}
+
+model Transfer {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  senderId       String   @db.VarChar(36)
+  senderEmail    String
+  recipientId    String   @db.VarChar(36)
+  recipientEmail String
+  amount         Decimal  @db.Decimal(12, 2)
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([createdAt])
+}
+
+model Contact {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  userId    String   @db.VarChar(36)
+  name      String
+  email     String
+  groupName String   @default("Family") // "Family", "Friends", "Work", "Others"
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model RolePermission {
+  role              String   @id // "SUPERADMIN", "MEMBER", "USER"
+  
+  // Dashboard
+  canViewDashboard  Boolean  @default(true)
+  
+  // Income CRUD
+  canViewIncome     Boolean  @default(true)
+  canCreateIncome   Boolean  @default(true)
+  canUpdateIncome   Boolean  @default(true)
+  canDeleteIncome   Boolean  @default(true)
+  
+  // Expense CRUD
+  canViewExpense    Boolean  @default(true)
+  canCreateExpense  Boolean  @default(true)
+  canUpdateExpense  Boolean  @default(true)
+  canDeleteExpense  Boolean  @default(true)
+  
+  // Imports
+  canViewImports      Boolean  @default(true)
+  canImportExcel      Boolean  @default(true)
+  canTruncateDatabase Boolean  @default(false)
+  
+  // Inbox
+  canViewInbox      Boolean  @default(true)
+  canComposeEmail   Boolean  @default(true)
+  
+  // Settings
+  canViewSettings   Boolean  @default(true)
+  canManageContacts Boolean  @default(true)
+  canManagePermissions Boolean @default(false)
+
+  updatedAt         DateTime @updatedAt
+}

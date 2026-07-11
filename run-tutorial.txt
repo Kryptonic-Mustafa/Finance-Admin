@@ -1,0 +1,6 @@
+1st Terminal:(To Run the Frontend and Backend)
+pnpm dev
+2nd Terminal:(To support working of Panda and uvicorn to communicate frontend and backend, use this only when importing purpose)
+first cd apps/automation
+then run:
+python -m uvicorn main:app --reload --port 8000
