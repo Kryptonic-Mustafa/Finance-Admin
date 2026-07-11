@@ -46,8 +46,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     whereClause.transaction_date = dateFilter;
   }
 
-  const incomes = await prisma.income.findMany({ where: whereClause, include: { category: true } });
-  const expenses = await prisma.expense.findMany({ where: whereClause, include: { category: true } });
+  const [incomes, expenses] = await Promise.all([
+    prisma.income.findMany({ where: whereClause, include: { category: true } }),
+    prisma.expense.findMany({ where: whereClause, include: { category: true } })
+  ]);
 
   const totalIncome = incomes.reduce((sum, item) => sum + Number(item.amount), 0);
   const totalExpense = expenses.reduce((sum, item) => sum + Number(item.amount), 0);

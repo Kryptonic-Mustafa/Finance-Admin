@@ -46,19 +46,20 @@ export default async function IncomePage({ searchParams }: { searchParams: Promi
   if (resolvedParams?.category) whereClause.category_id = resolvedParams.category;
 
   // Fetch Data & Categories for dropdown
-  const incomes = await prisma.income.findMany({ where: whereClause, include: { category: true }, orderBy: { transaction_date: 'desc' } });
-  const categories = await prisma.category.findMany({ where: { type: 'INCOME' }, orderBy: { name: 'asc' } });
+  const [incomes, categories, user] = await Promise.all([
+    prisma.income.findMany({ where: whereClause, include: { category: true }, orderBy: { transaction_date: 'desc' } }),
+    prisma.category.findMany({ where: { type: 'INCOME' }, orderBy: { name: 'asc' } }),
+    session.id ? prisma.user.findUnique({
+      where: { id: session.id },
+      select: { transactionPin: true }
+    }) : Promise.resolve(null)
+  ]);
+  const hasPin = !!user?.transactionPin;
 
   const serializedIncomes = incomes.map(inc => ({
     id: inc.id, source: inc.source, amount: Number(inc.amount), category: inc.category?.name || "Uncategorized",
     formatted_date: inc.transaction_date.toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' })
   }));
-
-  const user = session.id ? await prisma.user.findUnique({
-    where: { id: session.id },
-    select: { transactionPin: true }
-  }) : null;
-  const hasPin = !!user?.transactionPin;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">

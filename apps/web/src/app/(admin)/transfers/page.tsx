@@ -18,35 +18,34 @@ export default async function TransfersPage() {
     redirect("/settings");
   }
 
-  // Fetch potential recipients
-  const otherUsers = await prisma.user.findMany({
-    where: { 
-      id: { not: session.id },
-      status: "ACTIVE"
-    },
-    select: {
-      name: true,
-      email: true
-    },
-    orderBy: { name: 'asc' }
-  });
+  // Fetch potential recipients, transfers, and pin setup info concurrently
+  const [otherUsers, transfers, userRecord] = await Promise.all([
+    prisma.user.findMany({
+      where: { 
+        id: { not: session.id },
+        status: "ACTIVE"
+      },
+      select: {
+        name: true,
+        email: true
+      },
+      orderBy: { name: 'asc' }
+    }),
+    prisma.transfer.findMany({
+      where: {
+        OR: [
+          { senderId: session.id },
+          { recipientId: session.id }
+        ]
+      },
+      orderBy: { createdAt: 'desc' }
+    }),
+    prisma.user.findUnique({
+      where: { id: session.id },
+      select: { transactionPin: true }
+    })
+  ]);
 
-  // Fetch transfer records
-  const transfers = await prisma.transfer.findMany({
-    where: {
-      OR: [
-        { senderId: session.id },
-        { recipientId: session.id }
-      ]
-    },
-    orderBy: { createdAt: 'desc' }
-  });
-
-  // Check if active user has configured a Transaction PIN
-  const userRecord = await prisma.user.findUnique({
-    where: { id: session.id },
-    select: { transactionPin: true }
-  });
   const hasPin = !!userRecord?.transactionPin;
 
   // Retrieve currency symbol

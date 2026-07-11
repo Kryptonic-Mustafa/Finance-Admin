@@ -45,19 +45,21 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   if (resolvedParams?.search) whereClause.vendor = { contains: resolvedParams.search };
   if (resolvedParams?.category) whereClause.category_id = resolvedParams.category;
 
-  const expenses = await prisma.expense.findMany({ where: whereClause, include: { category: true }, orderBy: { transaction_date: 'desc' } });
-  const categories = await prisma.category.findMany({ where: { type: 'EXPENSE' }, orderBy: { name: 'asc' } });
+  // Fetch Data & Categories for dropdown
+  const [expenses, categories, user] = await Promise.all([
+    prisma.expense.findMany({ where: whereClause, include: { category: true }, orderBy: { transaction_date: 'desc' } }),
+    prisma.category.findMany({ where: { type: 'EXPENSE' }, orderBy: { name: 'asc' } }),
+    session.id ? prisma.user.findUnique({
+      where: { id: session.id },
+      select: { transactionPin: true }
+    }) : Promise.resolve(null)
+  ]);
+  const hasPin = !!user?.transactionPin;
 
   const serializedExpenses = expenses.map(exp => ({
     id: exp.id, vendor: exp.vendor, amount: Number(exp.amount), category: exp.category?.name || "Uncategorized",
     formatted_date: exp.transaction_date.toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' })
   }));
-
-  const user = session.id ? await prisma.user.findUnique({
-    where: { id: session.id },
-    select: { transactionPin: true }
-  }) : null;
-  const hasPin = !!user?.transactionPin;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
