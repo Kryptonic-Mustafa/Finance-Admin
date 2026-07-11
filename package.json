@@ -2,7 +2,7 @@
   "name": "finance-admin-root",
   "private": true,
   "scripts": {
-    "build": "turbo run build",
+    "build": "prisma generate && turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "db:generate": "prisma generate",
