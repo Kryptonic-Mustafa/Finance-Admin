@@ -48,7 +48,18 @@ export default async function IncomePage({ searchParams }: { searchParams: Promi
   // Fetch Data & Categories for dropdown
   const [incomes, categories, user] = await Promise.all([
     prisma.income.findMany({ where: whereClause, include: { category: true }, orderBy: { transaction_date: 'desc' } }),
-    prisma.category.findMany({ where: { type: 'INCOME' }, orderBy: { name: 'asc' } }),
+    prisma.category.findMany({
+      where: { type: 'INCOME' },
+      include: {
+        incomes: {
+          where: (perms.isMasterAdmin && (!impersonated || impersonated === 'all')) ? {} : { user_id: targetUserId },
+          take: 1,
+          orderBy: { transaction_date: 'desc' },
+          select: { source: true, notes: true }
+        }
+      },
+      orderBy: { name: 'asc' }
+    }),
     session.id ? prisma.user.findUnique({
       where: { id: session.id },
       select: { transactionPin: true }
@@ -57,7 +68,13 @@ export default async function IncomePage({ searchParams }: { searchParams: Promi
   const hasPin = !!user?.transactionPin;
 
   const serializedIncomes = incomes.map(inc => ({
-    id: inc.id, source: inc.source, amount: Number(inc.amount), category: inc.category?.name || "Uncategorized",
+    id: inc.id,
+    source: inc.source,
+    amount: Number(inc.amount),
+    category: inc.category?.name || "Uncategorized",
+    category_id: inc.category_id,
+    notes: inc.notes || '',
+    transaction_date: inc.transaction_date.toISOString().split('T')[0],
     formatted_date: inc.transaction_date.toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' })
   }));
 
@@ -80,6 +97,8 @@ export default async function IncomePage({ searchParams }: { searchParams: Promi
           currentCategory={resolvedParams?.category || ''}
           currentSearch={resolvedParams?.search || ''}
           canDelete={perms.canDeleteIncome}
+          canUpdate={perms.canUpdateIncome}
+          hasPin={hasPin}
         />
       </div>
     </div>

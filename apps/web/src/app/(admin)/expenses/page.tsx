@@ -48,7 +48,18 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   // Fetch Data & Categories for dropdown
   const [expenses, categories, user] = await Promise.all([
     prisma.expense.findMany({ where: whereClause, include: { category: true }, orderBy: { transaction_date: 'desc' } }),
-    prisma.category.findMany({ where: { type: 'EXPENSE' }, orderBy: { name: 'asc' } }),
+    prisma.category.findMany({
+      where: { type: 'EXPENSE' },
+      include: {
+        expenses: {
+          where: (perms.isMasterAdmin && (!impersonated || impersonated === 'all')) ? {} : { user_id: targetUserId },
+          take: 1,
+          orderBy: { transaction_date: 'desc' },
+          select: { vendor: true, notes: true }
+        }
+      },
+      orderBy: { name: 'asc' }
+    }),
     session.id ? prisma.user.findUnique({
       where: { id: session.id },
       select: { transactionPin: true }
@@ -57,7 +68,13 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
   const hasPin = !!user?.transactionPin;
 
   const serializedExpenses = expenses.map(exp => ({
-    id: exp.id, vendor: exp.vendor, amount: Number(exp.amount), category: exp.category?.name || "Uncategorized",
+    id: exp.id,
+    vendor: exp.vendor,
+    amount: Number(exp.amount),
+    category: exp.category?.name || "Uncategorized",
+    category_id: exp.category_id,
+    notes: exp.notes || '',
+    transaction_date: exp.transaction_date.toISOString().split('T')[0],
     formatted_date: exp.transaction_date.toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' })
   }));
 
@@ -80,6 +97,8 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
           currentCategory={resolvedParams?.category || ''}
           currentSearch={resolvedParams?.search || ''}
           canDelete={perms.canDeleteExpense}
+          canUpdate={perms.canUpdateExpense}
+          hasPin={hasPin}
         />
       </div>
     </div>
